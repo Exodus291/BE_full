@@ -1,5 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors'; // Impor paket cors
 
 // Muat variabel lingkungan dari file .env
 dotenv.config();
@@ -15,6 +16,10 @@ import shiftRoutes from './routes/shiftRoute.js';
 
 const app = express();
 
+// Middleware untuk CORS
+// Ini akan mengizinkan semua origin secara default.
+// Untuk konfigurasi lebih spesifik, lihat dokumentasi cors: https://www.npmjs.com/package/cors
+app.use(cors());
 // Middleware untuk parsing JSON body
 app.use(express.json());
 

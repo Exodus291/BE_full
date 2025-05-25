@@ -45,7 +45,7 @@ export const loginUser = async (req, res) => {
             name: user.name,
         };
 
-        const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
 
         res.json({
             message: 'Login berhasil',

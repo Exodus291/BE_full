@@ -1,6 +1,6 @@
 import app from './src/app.js'; // Menggunakan ES Module import
 
-const PORT = process.env.PORT || 3001; // Port bisa diambil dari .env
+const PORT = process.env.PORT || 3009; // Port bisa diambil dari .env
 
 // Jalankan server
 app.listen(PORT, () => {

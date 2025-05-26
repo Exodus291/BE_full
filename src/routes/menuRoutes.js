@@ -6,8 +6,8 @@ import { ROLES } from '../config/constants.js';
 
 const router = express.Router();
 
-// All menu routes require authentication
-router.use(authenticateToken);
+// Middleware authenticateToken akan diterapkan secara individual ke rute yang membutuhkannya.
+// Rute GET untuk melihat menu akan dibuat publik.
 
 const menuValidationRules = [
     body('name').notEmpty().withMessage('Nama menu tidak boleh kosong.').isString().trim(),
@@ -27,10 +27,14 @@ const menuUpdateValidationRules = [
 const idParamValidationRule = param('id').isInt().withMessage('ID Menu harus berupa angka.');
 
 // CRUD operations for menus - typically restricted to Owner
-router.post('/', authorizeRole([ROLES.OWNER]), menuValidationRules, createMenu);
-router.get('/', authorizeRole([ROLES.OWNER, ROLES.STAFF]), getAllMenus); // Staff might need to view menus
-router.get('/:id', authorizeRole([ROLES.OWNER, ROLES.STAFF]), idParamValidationRule, getMenuById);
-router.put('/:id', authorizeRole([ROLES.OWNER]), idParamValidationRule, menuUpdateValidationRules, updateMenu);
-router.delete('/:id', authorizeRole([ROLES.OWNER]), idParamValidationRule, deleteMenu); // Soft delete
+router.post('/', authenticateToken, authorizeRole([ROLES.OWNER]), menuValidationRules, createMenu);
+
+// Rute GET untuk menu sekarang publik (tidak memerlukan token)
+router.get('/', getAllMenus);
+router.get('/:id', idParamValidationRule, getMenuById);
+
+// Rute PUT dan DELETE tetap memerlukan otentikasi dan otorisasi
+router.put('/:id', authenticateToken, authorizeRole([ROLES.OWNER]), idParamValidationRule, menuUpdateValidationRules, updateMenu);
+router.delete('/:id', authenticateToken, authorizeRole([ROLES.OWNER]), idParamValidationRule, deleteMenu); // Soft delete
 
 export default router;

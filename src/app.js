@@ -12,14 +12,22 @@ import menuRoutes from './routes/menuRoutes.js';
 import transactionRoutes from './routes/transactionRoute.js';
 import reportRoutes from './routes/reportRoute.js';
 import shiftRoutes from './routes/shiftRoute.js';
-
+import categoryRoutes from './routes/categoryRoutes.js'; // Impor rute kategori
 
 const app = express();
 
 // Middleware untuk CORS
 // Ini akan mengizinkan semua origin secara default.
 // Untuk konfigurasi lebih spesifik, lihat dokumentasi cors: https://www.npmjs.com/package/cors
-app.use(cors());
+// CORS Configuration
+const corsOptions = {
+    origin: 'http://localhost:3000', // Allow only your frontend origin
+    credentials: true, // Allow cookies and authorization headers
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  };
+  
+  app.use(cors(corsOptions));
+  
 // Middleware untuk parsing JSON body
 app.use(express.json());
 
@@ -33,6 +41,7 @@ app.use('/api/admin', adminRoutes); // Rute khusus admin
 app.use('/api/staff', staffRoutes); // Rute khusus staff (atau owner)
 app.use('/api/menus', menuRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/categories', categoryRoutes); // Tambahkan rute untuk kategori
 app.use('/api/reports', reportRoutes);
 app.use('/api/shifts', shiftRoutes);
 

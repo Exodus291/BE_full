@@ -4,8 +4,10 @@ import { ROLES } from '../config/constants.js'; // Pastikan path ini benar
 const JWT_SECRET = process.env.JWT_SECRET || 'your-default-very-strong-secret-key';
 
 export function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    // Baca token dari HTTP-only cookie
+    const token = req.cookies.token;
+    // const authHeader = req.headers['authorization']; // Baris ini tidak lagi diperlukan jika token ada di cookie
+    // const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (token == null) {
         return res.status(401).json({ message: 'Unauthorized: Token tidak disediakan' });

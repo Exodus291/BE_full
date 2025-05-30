@@ -1,6 +1,6 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { loginUser, getUserProfile, registerOwner, registerStaffWithReferral } from '../controllers/authController.js';
+import { loginUser, getUserProfile, registerOwner, registerStaffWithReferral, logoutUser } from '../controllers/authController.js';
 import { authenticateToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -26,6 +26,7 @@ const staffRegisterValidationRules = [
 router.post('/login', loginValidationRules, loginUser);
 router.post('/register/owner', ownerRegisterValidationRules, registerOwner);
 router.post('/register/staff', staffRegisterValidationRules, registerStaffWithReferral);
+router.post('/logout', authenticateToken, logoutUser); // Rute untuk logout
 
 router.get('/profile', authenticateToken, getUserProfile); // Contoh rute profil
 

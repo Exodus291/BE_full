@@ -1,10 +1,10 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { validationResult } from 'express-validator';
+import { cookie, validationResult } from 'express-validator';
 import prisma from '../config/prismaClient.js';
 import { ROLES } from '../config/constants.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-default-very-strong-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET ;
 
 // Helper function to generate a random referral code
 function generateReferralCode(length = 8) {
@@ -47,9 +47,17 @@ export const loginUser = async (req, res) => {
 
         const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
 
+        // Mengatur token sebagai HTTP-only cookie
+        res.cookie('token', token, {
+            httpOnly: true, // Cookie tidak dapat diakses oleh JavaScript sisi klien
+            secure: process.env.NODE_ENV === 'production', // Kirim hanya melalui HTTPS di produksi
+            sameSite: 'strict', // Mencegah serangan CSRF
+            maxAge: 24 * 60 * 60 * 1000 // 1 hari, sama dengan expiresIn token
+        });
+
         res.json({
             message: 'Login berhasil',
-            token,
+            // Token tidak lagi dikirim di body jika menggunakan httpOnly cookie
             user: tokenPayload,
         });
     } catch (error) {
@@ -153,4 +161,19 @@ export const getStaffTasksData = (req, res) => {
         message: `Halo ${req.user.name}, ini adalah daftar tugas Anda.`,
         tasks: ['Selesaikan laporan', 'Hubungi klien', 'Perbarui sistem'],
     });
+};
+
+export const logoutUser = (req, res) => {
+    // Opsi cookie harus cocok dengan yang digunakan saat mengatur cookie
+    // terutama path dan domain jika disetel (default path adalah '/')
+    const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+    };
+
+    // Hapus cookie 'token'
+    res.clearCookie('token', cookieOptions);
+
+    res.status(200).json({ message: 'Logout berhasil' });
 };

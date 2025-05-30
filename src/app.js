@@ -1,5 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser'; // Impor cookie-parser
 import cors from 'cors'; // Impor paket cors
 
 // Muat variabel lingkungan dari file .env
@@ -13,6 +14,7 @@ import transactionRoutes from './routes/transactionRoute.js';
 import reportRoutes from './routes/reportRoute.js';
 import shiftRoutes from './routes/shiftRoute.js';
 import categoryRoutes from './routes/categoryRoutes.js'; // Impor rute kategori
+// import { cookie } from 'express-validator'; // Ini tidak digunakan untuk parsing cookie global, bisa dihapus jika tidak dipakai di tempat lain untuk validasi cookie secara spesifik
 
 const app = express();
 
@@ -27,7 +29,9 @@ const corsOptions = {
   };
   
   app.use(cors(corsOptions));
-  
+  // Middleware untuk parsing cookie
+  app.use(cookieParser());
+
 // Middleware untuk parsing JSON body
 app.use(express.json());
 

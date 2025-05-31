@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         Role?
-  store        String
-  bio          String?  // Bio pengguna, opsional
+  id                          Int      @id @default(autoincrement())
+  email                       String   @unique
+  passwordHash                String
+  name                        String
+  role                        Role     @default(STAFF) // Role is now non-optional with a default
+  store                       String
+  bio                         String?  // Bio pengguna, opsional
   profilePictureUrl String? // URL ke gambar profil pengguna, opsional
+  backgroundProfilePictureUrl String? // URL ke gambar background profil pengguna, opsional
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   referralCode String?  @unique

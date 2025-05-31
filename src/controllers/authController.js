@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { cookie, validationResult } from 'express-validator';
+import { validationResult } from 'express-validator';
 import prisma from '../config/prismaClient.js';
 import { ROLES } from '../config/constants.js';
 
@@ -167,6 +167,7 @@ export const getUserProfile = async (req, res) => {
                 referredByCode: true, 
                 bio: true,
                 profilePictureUrl: true,
+                backgroundProfilePictureUrl: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -200,22 +201,22 @@ export const updateUserProfile = async (req, res) => {
     if (name !== undefined) dataToUpdate.name = name;
     if (bio !== undefined) dataToUpdate.bio = bio;
 
-    // Cek apakah ada file yang diunggah oleh multer
-    if (req.file) {
-        // req.file.filename adalah nama file yang disimpan oleh multer di direktori 'public/uploads/profile_pictures/'
-        // Kita perlu menyimpan path yang dapat diakses secara publik
-        dataToUpdate.profilePictureUrl = `/uploads/profile_pictures/${req.file.filename}`;
-    }
-    
+    // Sekarang fungsi ini hanya mengupdate field teks.
+    // Jika tidak ada field teks yang diberikan, kembalikan error.
     if (Object.keys(dataToUpdate).length === 0) {
-        return res.status(400).json({ message: 'Tidak ada data untuk diperbarui.', errors: [{msg: 'Tidak ada field yang diberikan untuk pembaruan.'}] });
+        return res.status(400).json({ message: 'Tidak ada data teks untuk diperbarui.', errors: [{ msg: 'Tidak ada field teks (nama/bio) yang diberikan untuk pembaruan.' }] });
     }
 
     try {
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: dataToUpdate,
-            select: { id: true, email: true, name: true, role: true, store: true, bio: true, profilePictureUrl: true, referralCode: true, referredByCode: true, createdAt: true, updatedAt: true }, // Pilih field yang ingin dikembalikan
+            select: { // Pilih field yang ingin dikembalikan
+                id: true, email: true, name: true, role: true, store: true,
+                bio: true, profilePictureUrl: true, backgroundProfilePictureUrl: true,
+                referralCode: true, referredByCode: true,
+                createdAt: true, updatedAt: true
+            },
         });
         res.json({ message: 'Profil berhasil diperbarui.', user: updatedUser });
     } catch (error) {
@@ -223,6 +224,71 @@ export const updateUserProfile = async (req, res) => {
         res.status(500).json({ message: 'Gagal memperbarui profil.', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
     }
 };
+
+export const updateUserProfilePicture = async (req, res) => {
+    const userId = req.user.id;
+    const dataToUpdate = {};
+
+    // Cek file gambar profil yang diunggah (hasil dari multer.single('profilePicture'))
+    if (req.file && req.file.fieldname === 'profilePicture') {
+        // combinedStorage akan menempatkannya di 'public/uploads/profile_pictures/'
+        dataToUpdate.profilePictureUrl = `/uploads/profile_pictures/${req.file.filename}`;
+    } else {
+        return res.status(400).json({ message: 'Tidak ada file gambar profil yang diunggah.', errors: [{ msg: 'File gambar profil diperlukan.' }] });
+    }
+
+    try {
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: dataToUpdate,
+            select: { // Pilih field yang ingin dikembalikan, sama seperti getUserProfile
+                id: true, email: true, name: true, role: true, store: true,
+                bio: true, profilePictureUrl: true, backgroundProfilePictureUrl: true,
+                referralCode: true, referredByCode: true,
+                createdAt: true, updatedAt: true
+            },
+        });
+        res.json({ message: 'Gambar profil berhasil diperbarui.', user: updatedUser });
+    } catch (error) {
+        console.error("Update profile picture error:", error);
+        res.status(500).json({ message: 'Gagal memperbarui gambar profil.', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
+    }
+};
+
+
+
+export const updateUserBackgroundCover = async (req, res) => {
+    const userId = req.user.id;
+    const dataToUpdate = {};
+
+    // Cek file background cover yang diunggah (hasil dari multer.single('backgroundProfilePicture'))
+    // Pastikan fieldname di multer route adalah 'backgroundProfilePicture'
+    if (req.file && req.file.fieldname === 'backgroundProfilePicture') {
+        // combinedStorage akan menempatkannya di 'public/uploads/background_profile_pictures/'
+        dataToUpdate.backgroundProfilePictureUrl = `/uploads/background_profile_pictures/${req.file.filename}`;
+    } else {
+        return res.status(400).json({ message: 'Tidak ada file gambar background yang diunggah.', errors: [{ msg: 'File gambar background diperlukan.' }] });
+    }
+
+    try {
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: dataToUpdate,
+            select: { // Pilih field yang ingin dikembalikan, sama seperti getUserProfile
+                id: true, email: true, name: true, role: true, store: true,
+                bio: true, profilePictureUrl: true, backgroundProfilePictureUrl: true,
+                referralCode: true, referredByCode: true,
+                createdAt: true, updatedAt: true
+            },
+        });
+        res.json({ message: 'Gambar background profil berhasil diperbarui.', user: updatedUser });
+    } catch (error) {
+        console.error("Update background cover error:", error);
+        res.status(500).json({ message: 'Gagal memperbarui gambar background profil.', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
+    }
+};
+
+
 
 export const getAdminDashboardData = (req, res) => {
     res.json({

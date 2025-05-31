@@ -43,6 +43,9 @@ export const loginUser = async (req, res) => {
             email: user.email,
             role: user.role,
             name: user.name,
+            store: user.store,
+            referralCode: user.referralCode,
+            referredByCode: user.referredByCode, // Tambahkan jika ingin ada di token
         };
 
         const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
@@ -148,12 +151,77 @@ export const registerStaffWithReferral = async (req, res) => {
     }
 };
 
-export const getUserProfile = (req, res) => {
-    // req.user diisi oleh middleware authenticateToken
-    res.json({
-        message: `Selamat datang di profil Anda, ${req.user.name}!`,
-        user: req.user,
-    });
+export const getUserProfile = async (req, res) => {
+    const userId = req.user.id; // Diambil dari token setelah autentikasi
+
+    try {
+        const userProfile = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { // Pilih field yang ingin dikembalikan, hindari passwordHash
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                store: true,
+                referralCode: true,
+                referredByCode: true, 
+                bio: true,
+                profilePictureUrl: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+
+        if (!userProfile) {
+            // Seharusnya tidak terjadi jika token valid dan pengguna ada
+            return res.status(404).json({ message: 'Profil pengguna tidak ditemukan.' });
+        }
+
+        res.json({
+            message: `Selamat datang di profil Anda, ${userProfile.name}!`,
+            user: userProfile,
+        });
+    } catch (error) {
+        console.error("Get user profile error:", error);
+        res.status(500).json({ message: 'Gagal mengambil profil pengguna.', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
+    }
+};
+
+export const updateUserProfile = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const userId = req.user.id;
+    const { name, bio } = req.body; // profilePictureUrl tidak lagi diambil langsung dari body jika menggunakan file upload
+
+    const dataToUpdate = {};
+    if (name !== undefined) dataToUpdate.name = name;
+    if (bio !== undefined) dataToUpdate.bio = bio;
+
+    // Cek apakah ada file yang diunggah oleh multer
+    if (req.file) {
+        // req.file.filename adalah nama file yang disimpan oleh multer di direktori 'public/uploads/profile_pictures/'
+        // Kita perlu menyimpan path yang dapat diakses secara publik
+        dataToUpdate.profilePictureUrl = `/uploads/profile_pictures/${req.file.filename}`;
+    }
+    
+    if (Object.keys(dataToUpdate).length === 0) {
+        return res.status(400).json({ message: 'Tidak ada data untuk diperbarui.', errors: [{msg: 'Tidak ada field yang diberikan untuk pembaruan.'}] });
+    }
+
+    try {
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: dataToUpdate,
+            select: { id: true, email: true, name: true, role: true, store: true, bio: true, profilePictureUrl: true, referralCode: true, referredByCode: true, createdAt: true, updatedAt: true }, // Pilih field yang ingin dikembalikan
+        });
+        res.json({ message: 'Profil berhasil diperbarui.', user: updatedUser });
+    } catch (error) {
+        console.error("Update profile error:", error);
+        res.status(500).json({ message: 'Gagal memperbarui profil.', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
+    }
 };
 
 export const getAdminDashboardData = (req, res) => {

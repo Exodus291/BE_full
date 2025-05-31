@@ -1,5 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser'; // Impor cookie-parser
 import cors from 'cors'; // Impor paket cors
 
@@ -17,15 +19,17 @@ import categoryRoutes from './routes/categoryRoutes.js'; // Impor rute kategori
 // import { cookie } from 'express-validator'; // Ini tidak digunakan untuk parsing cookie global, bisa dihapus jika tidak dipakai di tempat lain untuk validasi cookie secara spesifik
 
 const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Middleware untuk CORS
 // Ini akan mengizinkan semua origin secara default.
 // Untuk konfigurasi lebih spesifik, lihat dokumentasi cors: https://www.npmjs.com/package/cors
 // CORS Configuration
 const corsOptions = {
-    origin: 'http://localhost:3000', // Allow only your frontend origin
-    credentials: true, // Allow cookies and authorization headers
-    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+    origin: 'http://localhost:3000', 
+    credentials: true,
+    optionsSuccessStatus: 200 
   };
   
   app.use(cors(corsOptions));
@@ -35,10 +39,8 @@ const corsOptions = {
 // Middleware untuk parsing JSON body
 app.use(express.json());
 
-if (process.env.JWT_SECRET === 'your-default-very-strong-secret-key') {
-    console.warn("PERINGATAN: JWT_SECRET menggunakan nilai default. Harap set di file .env untuk produksi!");
-}
-
+// Menyajikan file statis dari direktori 'public' yang ada di root proyek
+app.use(express.static(path.join(__dirname, '..', 'public')));
 // Routes
 app.use('/api/auth', authRoutes); // Rute untuk otentikasi (login, profile)
 app.use('/api/admin', adminRoutes); // Rute khusus admin
@@ -48,6 +50,10 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/categories', categoryRoutes); // Tambahkan rute untuk kategori
 app.use('/api/reports', reportRoutes);
 app.use('/api/shifts', shiftRoutes);
+
+if (process.env.JWT_SECRET === 'your-default-very-strong-secret-key' || !process.env.JWT_SECRET) {
+    console.warn("PERINGATAN: JWT_SECRET tidak disetel atau menggunakan nilai default. Harap set di file .env untuk produksi!");
+}
 
 
 // TODO: Tambahkan error handling middleware yang lebih baik

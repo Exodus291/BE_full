@@ -16,14 +16,27 @@ async function main() {
         name: 'Owner', // Or your preferred name
         passwordHash: ownerPassword,
         role: 'OWNER',
+        store: 'Toko Sejahtera Milik Owner', // Contoh nama toko untuk Owner
+        referralCode: 'OWNERREF123' // Contoh referral code untuk Owner
       },
       {
         email: 'staff1@example.com',
         name: 'Staff', // Or your preferred name
         passwordHash: staff1Password,
         role: 'STAFF',
+        store: 'Toko Sejahtera Milik Owner', // Staff akan memiliki store yang sama dengan owner
+        referredByCode: 'OWNERREF123', // Menunjukkan staff ini direfer oleh owner di atas
+        referralCode: null // Staff tidak memiliki referral code sendiri
       },
-      { email: 'staff2@example.com', name: 'Staff Junior', passwordHash: staff2Password, role: 'STAFF' }, // Or your preferred name
+      {
+        email: 'staff2@example.com',
+        name: 'Staff Junior',
+        passwordHash: staff2Password,
+        role: 'STAFF',
+        store: 'Toko Sejahtera Milik Owner', // Staff akan memiliki store yang sama dengan owner
+        referredByCode: 'OWNERREF123', // Menunjukkan staff ini direfer oleh owner di atas
+        referralCode: null // Staff tidak memiliki referral code sendiri
+      },
     ],
     skipDuplicates: true, // Abaikan jika email sudah ada
   });

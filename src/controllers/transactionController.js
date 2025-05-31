@@ -25,9 +25,6 @@ export const createTransaction = async (req, res) => {
                 if (!menu || menu.deletedAt) {
                     throw new Error(`Menu item with ID ${item.menuId} not found or unavailable.`);
                 }
-                // Pengecekan stok dan pengurangan stok dihapus
-                // if (menu.stock < item.quantity) { ... }
-                // await tx.menu.update({ ... data: { stock: { decrement: item.quantity } } ... });
                 
                 const itemTotal = menu.price * item.quantity;
                 totalAmount += itemTotal;

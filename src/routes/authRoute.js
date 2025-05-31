@@ -14,6 +14,7 @@ const ownerRegisterValidationRules = [
     body('email').isEmail().withMessage('Format email tidak valid.'),
     body('password').isLength({ min: 6 }).withMessage('Password minimal 6 karakter.'),
     body('name').notEmpty().withMessage('Nama tidak boleh kosong.'),
+    body('store').notEmpty().withMessage('Nama toko tidak boleh kosong.').isString().trim(),
 ];
 
 const staffRegisterValidationRules = [

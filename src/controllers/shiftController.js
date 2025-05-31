@@ -28,7 +28,7 @@ export const startShift = async (req, res) => {
 
         const newShift = await prisma.shift.create({
             data: {
-                initialCash: initialCash ? parseFloat(initialCash) : 0,
+                initialCash: initialCash ? new prisma.Decimal(initialCash) : 0,
                 openedByUserId,
                 status: 'OPEN',
             },
@@ -43,8 +43,24 @@ export const startShift = async (req, res) => {
 
 // Get all shifts (or filter by status, user, etc.)
 export const getAllShifts = async (req, res) => {
+    const { id: userId, role: userRole } = req.user; // Diambil dari middleware authenticateToken
+
     try {
+        let whereClause = {};
+
+        // Jika pengguna adalah STAFF, filter shift yang dibuka atau ditutup oleh mereka
+        if (userRole === ROLES.STAFF) {
+            whereClause = {
+                OR: [
+                    { openedByUserId: userId },
+                    { closedByUserId: userId },
+                ],
+            };
+        }
+        // Jika pengguna adalah OWNER, whereClause tetap kosong, sehingga semua shift diambil
+
         const shifts = await prisma.shift.findMany({
+            where: whereClause,
             include: {
                 openedByUser: { select: { id: true, name: true } },
                 closedByUser: { select: { id: true, name: true } },
@@ -93,7 +109,7 @@ export const closeShift = async (req, res) => {
             where: { id: parseInt(shiftId) },
             data: {
                 endTime: new Date(),
-                finalCash: parseFloat(finalCash),
+                finalCash: finalCash ? new prisma.Decimal (finalCash) : null,
                 totalSalesCalculated,
                 status: 'CLOSED',
                 closedByUserId,

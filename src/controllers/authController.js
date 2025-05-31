@@ -72,7 +72,7 @@ export const registerOwner = async (req, res) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, name } = req.body;
+    const { email, password, name, store } = req.body;
 
     try {
         const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -89,6 +89,7 @@ export const registerOwner = async (req, res) => {
                 passwordHash: hashedPassword,
                 name,
                 role: ROLES.OWNER,
+                store,
                 referralCode,
             },
         });
@@ -127,11 +128,17 @@ export const registerStaffWithReferral = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        // Staff juga bisa punya referral code sendiri jika diinginkan, atau bisa null/kosong
-        const staffReferralCode = generateReferralCode();
+        // Jika staff tidak dimaksudkan memiliki referral code sendiri, kita bisa set ke null
+        // const staffReferralCode = generateReferralCode(); 
 
         const newStaff = await prisma.user.create({
-            data: { email, passwordHash: hashedPassword, name, role: ROLES.STAFF, referredByCode: ownerReferralCode, referralCode: staffReferralCode },
+            data: { 
+                email, 
+                passwordHash: hashedPassword, 
+                name, role: ROLES.STAFF, 
+                referredByCode: ownerReferralCode, 
+                referralCode: null, // Atau tidak menyertakan field ini jika schema mengizinkan (String? berarti boleh null)
+                store: referringOwner.store },
         });
         const { passwordHash, ...userWithoutPassword } = newStaff;
         res.status(201).json({ message: 'Registrasi Staff berhasil', user: userWithoutPassword });

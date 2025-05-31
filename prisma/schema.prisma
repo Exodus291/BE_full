@@ -12,7 +12,8 @@ model User {
   email        String   @unique
   passwordHash String
   name         String
-  role         String?
+  role         Role?
+  store        String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   referralCode String?  @unique
@@ -40,7 +41,7 @@ model Category {
 model Menu {
   id          Int      @id @default(autoincrement())
   name        String   @unique
-  price       Float
+  price       Decimal  // Menggunakan Decimal untuk harga
   categoryId  Int?
   category    Category? @relation(fields: [categoryId], references: [id])
   createdAt   DateTime @default(now())
@@ -51,7 +52,7 @@ model Menu {
 
 model Transaction {
   id                Int      @id @default(autoincrement())
-  totalAmount       Float
+  totalAmount       Decimal  // Menggunakan Decimal untuk total
   transactionDate   DateTime @default(now())
   userId            Int // Staff who processed
   user              User     @relation(fields: [userId], references: [id])
@@ -68,16 +69,16 @@ model TransactionItem {
   menuId              Int
   menu                Menu     @relation(fields: [menuId], references: [id])
   quantity            Int
-  priceAtTransaction  Float // Price of the menu item at the time of transaction
+  priceAtTransaction  Decimal // Menggunakan Decimal untuk harga saat transaksi
 }
 
 model Shift {
   id                  Int      @id @default(autoincrement())
   startTime           DateTime @default(now())
   endTime             DateTime?
-  initialCash         Float?
-  finalCash           Float?
-  totalSalesCalculated Float?
+  initialCash         Decimal? // Menggunakan Decimal untuk kas awal
+  finalCash           Decimal? // Menggunakan Decimal untuk kas akhir
+  totalSalesCalculated Decimal? // Menggunakan Decimal untuk total penjualan
   status              ShiftStatus @default(OPEN)
   openedByUserId      Int
   openedByUser        User     @relation("OpenedByUser", fields: [openedByUserId], references: [id])

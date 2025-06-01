@@ -1,10 +1,16 @@
 import express from 'express';
-import { body } from 'express-validator';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { loginUser, getUserProfile, registerOwner, registerStaffWithReferral, logoutUser, updateUserProfile, updateUserProfilePicture, updateUserBackgroundCover } from '../controllers/authController.js';
 import { authenticateToken } from '../middlewares/authMiddleware.js';
+import {
+    loginValidationRules,
+    registerOwnerValidationRules,
+    registerStaffValidationRules,
+    updateUserProfileValidationRules
+} from '../middlewares/validators/authValidator.js'; // Corrected path: middlewares -> middleware
+
 
 const router = express.Router();
 
@@ -37,46 +43,17 @@ const combinedStorage = multer.diskStorage({
 // Menggunakan satu instance multer dengan storage yang sama untuk berbagai keperluan upload
 const uploader = multer({ storage: combinedStorage });
 
-const loginValidationRules = [
-    body('email').isEmail().withMessage('Format email tidak valid.'),
-    body('password').notEmpty().withMessage('Password tidak boleh kosong.'),
-];
-
-const ownerRegisterValidationRules = [
-    body('email').isEmail().withMessage('Format email tidak valid.'),
-    body('password').isLength({ min: 6 }).withMessage('Password minimal 6 karakter.'),
-    body('name').notEmpty().withMessage('Nama tidak boleh kosong.'),
-    body('store').notEmpty().withMessage('Nama toko tidak boleh kosong.').isString().trim(),
-];
-
-const staffRegisterValidationRules = [
-    body('email').isEmail().withMessage('Format email tidak valid.'),
-    body('password').isLength({ min: 6 }).withMessage('Password minimal 6 karakter.'),
-    body('name').notEmpty().withMessage('Nama tidak boleh kosong.'),
-    body('referralCode').notEmpty().withMessage('Kode referral tidak boleh kosong.'),
-];
-
-const updateProfileValidationRules = [
-    body('name').optional().notEmpty().withMessage('Nama tidak boleh kosong jika diisi.').isString().trim(),
-    body('bio').optional().isString().trim().isLength({ max: 500 }).withMessage('Bio maksimal 500 karakter.'),
-    // Validasi untuk profilePictureUrl dari body sekarang dihilangkan karena akan dihandle oleh file upload.
-    // Jika Anda masih ingin mengizinkan URL eksternal, validasi ini bisa dipertahankan dengan logika tambahan di controller.
-    // Untuk saat ini, kita fokus pada upload file.
-    // body('profilePictureUrl').optional({ checkFalsy: true }).isURL().withMessage('Format URL gambar profil tidak valid.'),
-];
-
-router.post('/login', loginValidationRules, loginUser);
-router.post('/register/owner', ownerRegisterValidationRules, registerOwner);
-router.post('/register/staff', staffRegisterValidationRules, registerStaffWithReferral);
+router.post('/login', loginValidationRules(), loginUser);
+router.post('/register/owner', registerOwnerValidationRules(), registerOwner);
+router.post('/register/staff', registerStaffValidationRules(), registerStaffWithReferral);
 router.post('/logout', authenticateToken, logoutUser); // Rute untuk logout
-
 
 router.get('/profile', authenticateToken, getUserProfile); // Contoh rute profil
 router.put(
     '/profile',
     authenticateToken,
     // uploader.single('profilePicture') dihapus dari sini, karena endpoint ini hanya untuk name dan bio
-    updateProfileValidationRules,
+    updateUserProfileValidationRules(), // Menggunakan aturan dari authValidator.js
     updateUserProfile
 );
 

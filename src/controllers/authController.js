@@ -4,12 +4,31 @@ import { validationResult } from 'express-validator';
 import prisma from '../config/prismaClient.js';
 import { ROLES } from '../config/constants.js';
 
-const JWT_SECRET = process.env.JWT_SECRET ;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Helper function to generate a random referral code
 function generateReferralCode(length = 8) {
     return Math.random().toString(36).substring(2, 2 + length).toUpperCase();
 }
+
+// Common select clause for user profile data to ensure consistency
+const userProfileSelect = {
+    id: true,
+    email: true,
+    name: true,
+    role: true,
+    bio: true,
+    profilePictureUrl: true,
+    backgroundProfilePictureUrl: true,
+    referralCode: true,
+    referredByCode: true,
+    createdAt: true,
+    updatedAt: true,
+    storeId: true, // Added for multi-store
+    store: {        // Added for multi-store: includes details of the store the user belongs to
+        select: { id: true, name: true }
+    }
+};
 
 export const loginUser = async (req, res) => {
     // Validasi input
@@ -26,6 +45,7 @@ export const loginUser = async (req, res) => {
     try {
         const user = await prisma.user.findUnique({
             where: { email },
+            include: { store: { select: { id: true, name: true } } } // Include store info
         });
 
         if (!user) {
@@ -43,8 +63,9 @@ export const loginUser = async (req, res) => {
             email: user.email,
             role: user.role,
             name: user.name,
-            store: user.store,
-            referralCode: user.referralCode,
+            storeId: user.storeId, // Use storeId from the user record
+            storeName: user.store ? user.store.name : null, // Get storeName from the related store object
+            referralCode: user.referralCode, // User's own referral code
             referredByCode: user.referredByCode, // Tambahkan jika ingin ada di token
         };
 
@@ -75,37 +96,65 @@ export const registerOwner = async (req, res) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, name, store } = req.body;
+    const { email, password, name, storeName } = req.body; // 'store' from body is now 'storeName'
 
     try {
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(409).json({ message: 'Registrasi gagal', errors: [{ msg: 'Email sudah terdaftar.' }] });
         }
+        if (!storeName || storeName.trim() === '') {
+            return res.status(400).json({ message: 'Registrasi gagal', errors: [{ msg: 'Nama toko diperlukan.' }] });
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const referralCode = generateReferralCode();
+        const ownerReferralCode = generateReferralCode();
 
-        const newUser = await prisma.user.create({
+        // Create User and their new Store in a transaction
+        // This assumes User model has `ownedStore Store? @relation("OwnedStore")`
+        // and Store model has `owner User @relation("OwnedStore", fields: [ownerId], references: [id])`
+        // and `ownerId Int @unique`
+        const createdOwnerAndStore = await prisma.user.create({
             data: {
                 email,
                 passwordHash: hashedPassword,
                 name,
                 role: ROLES.OWNER,
-                store,
-                referralCode,
+                referralCode: ownerReferralCode,
+                // Create and connect the store this owner owns and belongs to
+                ownedStore: { // Relation field on User model for the store they own
+                    create: {
+                        name: storeName,
+                    }
+                }
             },
+            include: {
+                ownedStore: { select: { id: true, name: true } }, // Get the created store's ID and name
+            }
         });
 
-        // Tidak mengembalikan passwordHash
-        const { passwordHash, ...userWithoutPassword } = newUser;
-        res.status(201).json({ message: 'Registrasi Owner berhasil', user: userWithoutPassword });
+        // Now, explicitly set the user's `storeId` to link them to the store they just created
+        // This `storeId` is for the general "StoreMembership" relation
+        const finalOwnerUser = await prisma.user.update({
+            where: { id: createdOwnerAndStore.id },
+            data: {
+                storeId: createdOwnerAndStore.ownedStore.id
+            },
+            select: userProfileSelect // Use the common select for response consistency
+        });
+
+        res.status(201).json({ message: 'Registrasi Owner dan Toko berhasil', user: finalOwnerUser });
 
     } catch (error) {
         console.error("Register Owner error:", error);
-        if (error.code === 'P2002' && error.meta?.target?.includes('referralCode')) {
-            // Jarang terjadi, tapi handle jika referral code duplikat
-            return res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Gagal membuat kode referral unik, silakan coba lagi.' }] });
+        if (error.code === 'P2002') { // Unique constraint violation
+            const target = error.meta?.target;
+            if (target && (target.includes('referralCode') || (typeof target === 'string' && target.endsWith('_referralCode_key')))) {
+                return res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Gagal membuat kode referral unik untuk pengguna, silakan coba lagi.' }] });
+            } else if (target && (target.includes('name') || (typeof target === 'string' && target.endsWith('_name_key'))) && error.message.toLowerCase().includes('store')) { // Heuristic for store name
+                return res.status(409).json({ message: 'Registrasi gagal', errors: [{ msg: 'Nama toko sudah digunakan.' }] });
+            }
+            return res.status(409).json({ message: 'Registrasi gagal', errors: [{ msg: 'Data yang dimasukkan sudah ada atau tidak unik.' }] });
         }
         res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
     }
@@ -120,9 +169,12 @@ export const registerStaffWithReferral = async (req, res) => {
     const { email, password, name, referralCode: ownerReferralCode } = req.body;
 
     try {
-        const referringOwner = await prisma.user.findUnique({ where: { referralCode: ownerReferralCode } });
-        if (!referringOwner || referringOwner.role !== ROLES.OWNER) {
-            return res.status(400).json({ message: 'Registrasi gagal', errors: [{ msg: 'Kode referral tidak valid atau bukan milik Owner.' }] });
+        const referringOwner = await prisma.user.findUnique({
+            where: { referralCode: ownerReferralCode },
+            select: { id: true, role: true, storeId: true } // Select storeId of the owner
+        });
+        if (!referringOwner || referringOwner.role !== ROLES.OWNER || !referringOwner.storeId) {
+            return res.status(400).json({ message: 'Registrasi gagal', errors: [{ msg: 'Kode referral tidak valid, bukan milik Owner, atau Owner tidak memiliki toko terdaftar.' }] });
         }
 
         const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -131,22 +183,31 @@ export const registerStaffWithReferral = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        // Jika staff tidak dimaksudkan memiliki referral code sendiri, kita bisa set ke null
-        // const staffReferralCode = generateReferralCode(); 
+        const staffReferralCode = generateReferralCode(); // Hasilkan kode referral untuk staff
 
         const newStaff = await prisma.user.create({
             data: { 
                 email, 
                 passwordHash: hashedPassword, 
-                name, role: ROLES.STAFF, 
+                name, 
+                role: ROLES.STAFF, 
                 referredByCode: ownerReferralCode, 
-                referralCode: null, // Atau tidak menyertakan field ini jika schema mengizinkan (String? berarti boleh null)
-                store: referringOwner.store },
+                referralCode: staffReferralCode,
+                storeId: referringOwner.storeId, // Assign staff to the referring owner's store
+            },
+            select: userProfileSelect // Use the common select for response consistency
         });
-        const { passwordHash, ...userWithoutPassword } = newStaff;
-        res.status(201).json({ message: 'Registrasi Staff berhasil', user: userWithoutPassword });
+        res.status(201).json({ message: 'Registrasi Staff berhasil', user: newStaff });
     } catch (error) {
         console.error("Register Staff error:", error);
+        if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
+            // Seharusnya sudah ditangani oleh pengecekan existingUser, tapi sebagai fallback
+            return res.status(409).json({ message: 'Registrasi gagal', errors: [{ msg: 'Email sudah terdaftar.' }] });
+        }
+        if (error.code === 'P2002' && error.meta?.target?.includes('referralCode')) {
+            // Menangani jika kode referral staff yang dihasilkan duplikat
+            return res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Gagal membuat kode referral unik untuk staff, silakan coba lagi.' }] });
+        }
         res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
     }
 };
@@ -157,20 +218,7 @@ export const getUserProfile = async (req, res) => {
     try {
         const userProfile = await prisma.user.findUnique({
             where: { id: userId },
-            select: { // Pilih field yang ingin dikembalikan, hindari passwordHash
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                store: true,
-                referralCode: true,
-                referredByCode: true, 
-                bio: true,
-                profilePictureUrl: true,
-                backgroundProfilePictureUrl: true,
-                createdAt: true,
-                updatedAt: true,
-            },
+            select: userProfileSelect, // Use the common select clause
         });
 
         if (!userProfile) {
@@ -211,12 +259,7 @@ export const updateUserProfile = async (req, res) => {
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: dataToUpdate,
-            select: { // Pilih field yang ingin dikembalikan
-                id: true, email: true, name: true, role: true, store: true,
-                bio: true, profilePictureUrl: true, backgroundProfilePictureUrl: true,
-                referralCode: true, referredByCode: true,
-                createdAt: true, updatedAt: true
-            },
+            select: userProfileSelect, // Use the common select clause
         });
         res.json({ message: 'Profil berhasil diperbarui.', user: updatedUser });
     } catch (error) {
@@ -241,12 +284,7 @@ export const updateUserProfilePicture = async (req, res) => {
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: dataToUpdate,
-            select: { // Pilih field yang ingin dikembalikan, sama seperti getUserProfile
-                id: true, email: true, name: true, role: true, store: true,
-                bio: true, profilePictureUrl: true, backgroundProfilePictureUrl: true,
-                referralCode: true, referredByCode: true,
-                createdAt: true, updatedAt: true
-            },
+            select: userProfileSelect, // Use the common select clause
         });
         res.json({ message: 'Gambar profil berhasil diperbarui.', user: updatedUser });
     } catch (error) {
@@ -274,34 +312,13 @@ export const updateUserBackgroundCover = async (req, res) => {
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: dataToUpdate,
-            select: { // Pilih field yang ingin dikembalikan, sama seperti getUserProfile
-                id: true, email: true, name: true, role: true, store: true,
-                bio: true, profilePictureUrl: true, backgroundProfilePictureUrl: true,
-                referralCode: true, referredByCode: true,
-                createdAt: true, updatedAt: true
-            },
+            select: userProfileSelect, // Use the common select clause
         });
         res.json({ message: 'Gambar background profil berhasil diperbarui.', user: updatedUser });
     } catch (error) {
         console.error("Update background cover error:", error);
         res.status(500).json({ message: 'Gagal memperbarui gambar background profil.', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
     }
-};
-
-
-
-export const getAdminDashboardData = (req, res) => {
-    res.json({
-        message: 'Selamat datang di Dashboard Admin, Owner!',
-        data: 'Informasi rahasia khusus owner.',
-    });
-};
-
-export const getStaffTasksData = (req, res) => {
-    res.json({
-        message: `Halo ${req.user.name}, ini adalah daftar tugas Anda.`,
-        tasks: ['Selesaikan laporan', 'Hubungi klien', 'Perbarui sistem'],
-    });
 };
 
 export const logoutUser = (req, res) => {

@@ -9,29 +9,35 @@ export const createCategory = async (req, res) => {
     }
 
     const { name } = req.body;
+    const storeId = req.user.storeId; // Diambil dari token JWT pengguna yang login
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
 
     try {
         // Cek apakah kategori dengan nama yang sama sudah ada dan tidak di-soft-delete
         const existingCategory = await prisma.category.findFirst({
             where: {
                 name: name,
+                storeId: storeId,
                 deletedAt: null, // Hanya cek kategori yang aktif
             },
         });
 
         if (existingCategory) {
-            return res.status(409).json({ message: 'Gagal membuat kategori', errors: [{ msg: 'Kategori dengan nama ini sudah ada.' }] });
+            return res.status(409).json({ message: 'Gagal membuat kategori', errors: [{ msg: 'Kategori dengan nama ini sudah ada di toko Anda.' }] });
         }
 
         const newCategory = await prisma.category.create({
-            data: { name },
+            data: { name, storeId },
         });
         res.status(201).json(newCategory);
     } catch (error) {
         // P2002 adalah kode error Prisma untuk unique constraint violation
-        // Ini sebagai fallback jika pengecekan di atas terlewat (misalnya karena race condition atau jika tidak memfilter deletedAt)
-        if (error.code === 'P2002' && error.meta?.target?.includes('name')) {
-            return res.status(409).json({ message: 'Gagal membuat kategori', errors: [{ msg: 'Kategori dengan nama ini sudah ada.' }] });
+        // Ini sebagai fallback jika pengecekan `existingCategory` di atas terlewat (seharusnya tidak terjadi jika logika di atas benar)
+        if (error.code === 'P2002' && error.meta?.target?.includes('name') && error.meta?.target?.includes('storeId')) {
+            return res.status(409).json({ message: 'Gagal membuat kategori', errors: [{ msg: 'Kategori dengan nama ini sudah ada di toko Anda (DB constraint).' }] });
         }
         console.error("Create category error:", error);
         res.status(500).json({ message: 'Gagal membuat kategori', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
@@ -40,10 +46,16 @@ export const createCategory = async (req, res) => {
 
 // Get all categories (excluding soft-deleted)
 export const getAllCategories = async (req, res) => {
+    const storeId = req.user.storeId;
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
     try {
         const categories = await prisma.category.findMany({
             where: {
                 deletedAt: null, // Hanya ambil kategori yang tidak di-soft-delete
+                storeId: storeId, // Filter berdasarkan toko pengguna
             },
             orderBy: {
                 name: 'asc', // Urutkan berdasarkan nama
@@ -64,11 +76,17 @@ export const getCategoryById = async (req, res) => {
     }
 
     const { id } = req.params;
+    const storeId = req.user.storeId;
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
     try {
         const category = await prisma.category.findFirst({
             where: {
                 id: parseInt(id),
                 deletedAt: null, // Hanya ambil jika tidak di-soft-delete
+                storeId: storeId, // Pastikan kategori milik toko pengguna
             },
         });
 
@@ -91,11 +109,16 @@ export const updateCategory = async (req, res) => {
 
     const { id } = req.params;
     const { name } = req.body;
+    const storeId = req.user.storeId;
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
 
     try {
         // Pastikan kategori yang akan diupdate ada dan belum di-soft-delete
         const existingCategory = await prisma.category.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+            where: { id: parseInt(id), deletedAt: null, storeId: storeId }
         });
 
         if (!existingCategory) {
@@ -103,12 +126,20 @@ export const updateCategory = async (req, res) => {
         }
 
         const updatedCategory = await prisma.category.update({
-            where: { id: parseInt(id) },
+            where: { 
+                id: parseInt(id),
+                // storeId: storeId // Sebenarnya tidak perlu di where update jika sudah dicek di existingCategory
+            },
             data: { name },
         });
         res.json(updatedCategory);
     } catch (error) {
-        if (error.code === 'P2002' && error.meta?.target?.includes('name')) { // Unique constraint violation
+        // P2002 untuk @@unique([name, storeId])
+        if (error.code === 'P2002' && error.meta?.target?.includes('name') && error.meta?.target?.includes('storeId')) { 
+            return res.status(409).json({ message: 'Gagal memperbarui kategori', errors: [{ msg: 'Kategori lain dengan nama ini sudah ada di toko Anda.' }] });
+        }
+        // P2025 jika record tidak ditemukan (seharusnya sudah ditangani oleh existingCategory)
+        if (error.code === 'P2025') {
             return res.status(409).json({ message: 'Gagal memperbarui kategori', errors: [{ msg: 'Kategori lain dengan nama ini sudah ada.' }] });
         }
         console.error("Update category error:", error);
@@ -124,10 +155,16 @@ export const deleteCategory = async (req, res) => {
     }
 
     const { id } = req.params;
+    const storeId = req.user.storeId;
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
+
     try {
         // Pastikan kategori yang akan dihapus ada dan belum di-soft-delete
         const existingCategory = await prisma.category.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+            where: { id: parseInt(id), deletedAt: null, storeId: storeId }
         });
 
         if (!existingCategory) {
@@ -135,7 +172,10 @@ export const deleteCategory = async (req, res) => {
         }
 
         await prisma.category.update({
-            where: { id: parseInt(id) },
+            where: { 
+                id: parseInt(id),
+                // storeId: storeId // Tidak perlu di where update jika sudah dicek
+            },
             data: { deletedAt: new Date() }, // Set deletedAt ke waktu sekarang
         });
 

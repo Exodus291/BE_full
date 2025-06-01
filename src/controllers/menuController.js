@@ -9,22 +9,42 @@ export const createMenu = async (req, res) => {
     }
 
     const { name, price, categoryId, imageUrl } = req.body;
-    // Pemeriksaan manual sudah tidak diperlukan
-    
+    const storeId = req.user.storeId;
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
+
     try {
+        // Jika categoryId diberikan, pastikan kategori tersebut ada dan milik toko yang sama
+        if (categoryId) {
+            const category = await prisma.category.findFirst({
+                where: {
+                    id: parseInt(categoryId),
+                    storeId: storeId,
+                    deletedAt: null,
+                }
+            });
+            if (!category) {
+                return res.status(400).json({ message: 'Gagal membuat menu', errors: [{ msg: 'Kategori tidak valid atau bukan milik toko Anda.' }] });
+            }
+        }
+
         const newMenu = await prisma.menu.create({
             data: {
                 name,
                 price: parseFloat(price),
                 categoryId: categoryId ? parseInt(categoryId) : undefined,
-                imageUrl,
+                // imageUrl, // Akan dihandle jika ada upload file terpisah
+                storeId: storeId,
             },
             include: { category: true },
         });
         res.status(201).json(newMenu);
     } catch (error) {
-        if (error.code === 'P2002' && error.meta?.target?.includes('name')) {
-            return res.status(409).json({ message: 'Gagal membuat menu', errors: [{ msg: 'Menu dengan nama ini sudah ada.' }] });
+        // P2002 untuk @@unique([name, storeId])
+        if (error.code === 'P2002' && error.meta?.target?.includes('name') && error.meta?.target?.includes('storeId')) {
+            return res.status(409).json({ message: 'Gagal membuat menu', errors: [{ msg: 'Menu dengan nama ini sudah ada di toko Anda.' }] });
         }
         console.error("Create menu error:", error);
         res.status(500).json({ message: 'Gagal membuat menu', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
@@ -33,10 +53,16 @@ export const createMenu = async (req, res) => {
 
 // Get all menu items (excluding soft-deleted)
 export const getAllMenus = async (req, res) => {
+    const storeId = req.user.storeId;
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
+
     try {
         const menus = await prisma.menu.findMany({
             where: {
                 deletedAt: null, // Filter out soft-deleted items
+                storeId: storeId, // Filter berdasarkan toko pengguna
             },
             include: { category: true },
             orderBy: { name: 'asc' }
@@ -50,12 +76,21 @@ export const getAllMenus = async (req, res) => {
 
 // Get a single menu item by ID (excluding soft-deleted)
 export const getMenuById = async (req, res) => {
+    const errors = validationResult(req); // Untuk validasi param 'id'
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
     const { id } = req.params;
+    const storeId = req.user.storeId;
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
     try {
         const menu = await prisma.menu.findFirst({
             where: {
                 id: parseInt(id),
                 deletedAt: null,
+                storeId: storeId, // Pastikan menu milik toko pengguna
             },
             include: { category: true },
         });
@@ -77,7 +112,12 @@ export const searchMenus = async (req, res) => {
     }
 
     const { q: searchQuery } = req.query; // Mengambil query 'q' dari URL, misalnya /menus/search?q=ayam
+    const storeId = req.user.storeId;
 
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
+    
     try {
         const menus = await prisma.menu.findMany({
             where: {
@@ -86,6 +126,7 @@ export const searchMenus = async (req, res) => {
                     mode: 'insensitive', // Pencarian case-insensitive
                 },
                 deletedAt: null, // Hanya cari di menu yang belum di-soft-delete
+                storeId: storeId, // Filter berdasarkan toko pengguna
             },
             include: {
                 category: true, // Sertakan informasi kategori
@@ -115,25 +156,47 @@ export const updateMenu = async (req, res) => {
 
     const { id } = req.params;
     const { name, price, categoryId, imageUrl } = req.body;
+    const storeId = req.user.storeId;
 
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
 
     try {
         // Pastikan menu yang akan diupdate ada dan belum di-soft-delete
         const existingMenu = await prisma.menu.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+            where: { id: parseInt(id), deletedAt: null, storeId: storeId }
         });
 
         if (!existingMenu) {
             return res.status(404).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Menu item tidak ditemukan atau sudah dihapus.' }] });
         }
-        
+
+        // Jika categoryId diberikan dan diubah, pastikan kategori baru tersebut ada dan milik toko yang sama
+        if (categoryId !== undefined && existingMenu.categoryId !== parseInt(categoryId)) {
+            if (categoryId === null) { // Mengizinkan untuk menghapus kategori dari menu
+                // Tidak perlu validasi lebih lanjut jika categoryId di-set ke null
+            } else {
+                const category = await prisma.category.findFirst({
+                    where: {
+                        id: parseInt(categoryId),
+                        storeId: storeId,
+                        deletedAt: null,
+                    }
+                });
+                if (!category) {
+                    return res.status(400).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Kategori baru tidak valid atau bukan milik toko Anda.' }] });
+                }
+            }
+        }
+
         const updatedMenu = await prisma.menu.update({
             where: { id: parseInt(id) },
             data: {
                 name,
                 price: price !== undefined ? parseFloat(price) : undefined,
-                categoryId: categoryId !== undefined ? parseInt(categoryId) : undefined,
-                imageUrl,
+                categoryId: categoryId !== undefined ? (categoryId === null ? null : parseInt(categoryId)) : undefined,
+                // imageUrl, // Akan dihandle jika ada upload file terpisah
             },
             include: { category: true },
         });
@@ -144,8 +207,8 @@ export const updateMenu = async (req, res) => {
         if (error.code === 'P2025') { 
             return res.status(404).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Menu item tidak ditemukan untuk diperbarui.' }] });
         }
-        if (error.code === 'P2002' && error.meta?.target?.includes('name')) {
-            return res.status(409).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Menu lain dengan nama ini sudah ada.' }] });
+        if (error.code === 'P2002' && error.meta?.target?.includes('name') && error.meta?.target?.includes('storeId')) {
+            return res.status(409).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Menu lain dengan nama ini sudah ada di toko Anda.' }] });
         }
         console.error("Update menu error:", error);
         res.status(500).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
@@ -154,11 +217,18 @@ export const updateMenu = async (req, res) => {
 
 // Soft delete a menu item
 export const deleteMenu = async (req, res) => {
+    const errors = validationResult(req); // Untuk validasi param 'id'
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
     const { id } = req.params;
+    const storeId = req.user.storeId;
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
     try {
-        // Pastikan menu yang akan dihapus ada dan belum di-soft-delete
         const existingMenu = await prisma.menu.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+            where: { id: parseInt(id), deletedAt: null, storeId: storeId }
         });
 
         if (!existingMenu) {

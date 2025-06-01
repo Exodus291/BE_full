@@ -9,7 +9,7 @@ import cors from 'cors'; // Impor paket cors
 dotenv.config();
 
 import authRoutes from './routes/authRoute.js';
-import adminRoutes from './routes/adminRoute.js';
+// import adminRoutes from './routes/adminRoute.js'; // Dihapus karena admin tidak digunakan
 import staffRoutes from './routes/staffRoute.js';
 import menuRoutes from './routes/menuRoutes.js';
 import transactionRoutes from './routes/transactionRoute.js';
@@ -42,8 +42,7 @@ app.use(express.json());
 // Menyajikan file statis dari direktori 'public' yang ada di root proyek
 app.use(express.static(path.join(__dirname, '..', 'public')));
 // Routes
-app.use('/api/auth', authRoutes); // Rute untuk otentikasi (login, profile)
-app.use('/api/admin', adminRoutes); // Rute khusus admin
+app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes); // Rute khusus staff (atau owner)
 app.use('/api/menus', menuRoutes);
 app.use('/api/transactions', transactionRoutes);

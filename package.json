@@ -8,8 +8,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "node prisma/seed.js"
+    "prisma:migrate": "prisma migrate dev"
   },
   "keywords": [],
   "author": "",
@@ -29,5 +28,8 @@
   "devDependencies": {
     "nodemon": "^3.1.0",
     "prisma": "^5.12.1"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }

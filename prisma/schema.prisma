@@ -13,9 +13,8 @@ model User {
   passwordHash                String
   name                        String
   role                        Role     @default(STAFF) // Role is now non-optional with a default
-  store                       String
   bio                         String?  // Bio pengguna, opsional
-  profilePictureUrl String? // URL ke gambar profil pengguna, opsional
+  profilePictureUrl           String? // URL ke gambar profil pengguna, opsional
   backgroundProfilePictureUrl String? // URL ke gambar background profil pengguna, opsional
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -25,6 +24,11 @@ model User {
   openedShifts  Shift[]  @relation("OpenedByUser")
   closedShifts  Shift[]  @relation("ClosedByUser")
   transactions  Transaction[]
+
+  // Relasi untuk multi-store
+  storeId      Int?     // Toko tempat user ini bekerja (Owner atau Staff)
+  store        Store?   @relation("StoreMembership", fields: [storeId], references: [id])
+  ownedStore   Store?   @relation("OwnedStore") // Toko yang dimiliki oleh user ini (jika role OWNER)
 }
 
 enum Role {
@@ -32,18 +36,38 @@ enum Role {
   STAFF
 }
 
+model Store {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique // Nama toko harus unik
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerId   Int      @unique // Setiap toko hanya dimiliki oleh satu Owner
+  owner     User     @relation("OwnedStore", fields: [ownerId], references: [id])
+  members   User[]   @relation("StoreMembership") // Semua user (Owner & Staff) yang tergabung dalam toko ini
+
+  categories Category[] // Kategori yang dimiliki oleh toko ini
+  menus      Menu[]     // Menu yang dimiliki oleh toko ini
+  shifts     Shift[]    // Shift yang terjadi di toko ini
+  transactions Transaction[] // Transaksi yang terjadi di toko ini
+}
+
 model Category {
   id        Int      @id @default(autoincrement())
-  name      String   @unique
+  name      String   // Nama kategori, unik per toko (akan dihandle di logic atau constraint komposit jika perlu)
   menus     Menu[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime? 
+  storeId   Int
+  store     Store    @relation(fields: [storeId], references: [id])
+
+  @@unique([name, storeId]) // Kategori harus unik per toko
 }
 
 model Menu {
   id          Int      @id @default(autoincrement())
-  name        String   @unique
+  name        String   // Nama menu, unik per toko (akan dihandle di logic atau constraint komposit jika perlu)
   price       Decimal  // Menggunakan Decimal untuk harga
   categoryId  Int?
   category    Category? @relation(fields: [categoryId], references: [id])
@@ -51,6 +75,10 @@ model Menu {
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime? // For soft delete
   TransactionItem TransactionItem[]
+  storeId     Int
+  store       Store    @relation(fields: [storeId], references: [id])
+
+  @@unique([name, storeId]) // Menu harus unik per toko
 }
 
 model Transaction {
@@ -63,6 +91,8 @@ model Transaction {
   transactionItems  TransactionItem[]
   shiftId           Int?
   shift             Shift?   @relation(fields: [shiftId], references: [id])
+  storeId           Int
+  store             Store    @relation(fields: [storeId], references: [id])
 }
 
 model TransactionItem {
@@ -88,6 +118,8 @@ model Shift {
   closedByUserId      Int?
   closedByUser        User?    @relation("ClosedByUser", fields: [closedByUserId], references: [id])
   transactions        Transaction[]
+  storeId             Int
+  store               Store    @relation(fields: [storeId], references: [id])
 }
 
 enum ShiftStatus {

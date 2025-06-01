@@ -11,14 +11,20 @@ export const startShift = async (req, res) => {
     }
     const { initialCash } = req.body;
 
-    const openedByUserId = req.user.id; // From authenticateToken middleware
+    const openedByUserId = req.user.id; 
+    const storeId = req.user.storeId;
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
 
     try {
-        // Check if there's already an open shift for this user or globally (depending on business logic)
+        // Check if there's already an open shift for this store
         const existingOpenShift = await prisma.shift.findFirst({
             where: {
                 status: 'OPEN',
-                // openedByUserId: openedByUserId, // Uncomment if shifts are per-user
+                storeId: storeId, 
+                // Anda bisa menambahkan openedByUserId: openedByUserId jika satu user hanya boleh buka satu shift di satu toko
             }
         });
 
@@ -30,6 +36,7 @@ export const startShift = async (req, res) => {
             data: {
                 initialCash: initialCash ? new prisma.Decimal(initialCash) : 0,
                 openedByUserId,
+                storeId, // Simpan storeId dengan shift
                 status: 'OPEN',
             },
             include: { openedByUser: { select: { id: true, name: true } } }
@@ -43,19 +50,24 @@ export const startShift = async (req, res) => {
 
 // Get all shifts (or filter by status, user, etc.)
 export const getAllShifts = async (req, res) => {
-    const { id: userId, role: userRole } = req.user; // Diambil dari middleware authenticateToken
+    const { id: userId, role: userRole, storeId } = req.user; 
+
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
 
     try {
-        let whereClause = {};
+        let whereClause = { storeId: storeId }; // Selalu filter berdasarkan storeId
 
         // Jika pengguna adalah STAFF, filter shift yang dibuka atau ditutup oleh mereka
         if (userRole === ROLES.STAFF) {
-            whereClause = {
-                OR: [
-                    { openedByUserId: userId },
-                    { closedByUserId: userId },
-                ],
-            };
+            whereClause.OR = [
+                { openedByUserId: userId },
+                { closedByUserId: userId },
+            ];
+        } else if (userRole === ROLES.OWNER) {
+            // Owner melihat semua shift di tokonya
+            // whereClause sudah benar (hanya storeId)
         }
         // Jika pengguna adalah OWNER, whereClause tetap kosong, sehingga semua shift diambil
 
@@ -83,14 +95,19 @@ export const closeShift = async (req, res) => {
 
     const { shiftId } = req.params; // ID of the shift to close
     const { finalCash } = req.body;
-    const closedByUserId = req.user.id; // From authenticateToken middleware
+    const closedByUserId = req.user.id; 
+    const storeId = req.user.storeId;
 
+    if (!storeId) {
+        return res.status(403).json({ message: 'Akses ditolak', errors: [{ msg: 'Pengguna tidak terkait dengan toko manapun.' }] });
+    }
     
     try {
         const shiftToClose = await prisma.shift.findFirst({
             where: {
                 id: parseInt(shiftId),
-                status: 'OPEN',
+                storeId: storeId, // Pastikan shift milik toko pengguna
+                status: 'OPEN', 
             }
         });
 
@@ -101,7 +118,7 @@ export const closeShift = async (req, res) => {
         // Calculate total sales during this shift
         const transactionsInShift = await prisma.transaction.aggregate({
             _sum: { totalAmount: true },
-            where: { shiftId: parseInt(shiftId) },
+            where: { shiftId: parseInt(shiftId), storeId: storeId }, // Pastikan transaksi juga dari toko yang sama
         });
         const totalSalesCalculated = transactionsInShift._sum.totalAmount || 0;
 

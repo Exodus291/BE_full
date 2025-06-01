@@ -69,6 +69,43 @@ export const getMenuById = async (req, res) => {
     }
 };
 
+// Search menu items by name query
+export const searchMenus = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { q: searchQuery } = req.query; // Mengambil query 'q' dari URL, misalnya /menus/search?q=ayam
+
+    try {
+        const menus = await prisma.menu.findMany({
+            where: {
+                name: {
+                    contains: searchQuery,
+                    mode: 'insensitive', // Pencarian case-insensitive
+                },
+                deletedAt: null, // Hanya cari di menu yang belum di-soft-delete
+            },
+            include: {
+                category: true, // Sertakan informasi kategori
+            },
+            orderBy: {
+                name: 'asc', // Urutkan hasil berdasarkan nama
+            },
+        });
+
+        if (menus.length === 0) {
+            return res.status(404).json({ message: `Tidak ada menu yang ditemukan dengan query "${searchQuery}".`, data: [] });
+        }
+
+        res.json({ message: `Hasil pencarian untuk "${searchQuery}":`, data: menus });
+    } catch (error) {
+        console.error("Search menus error:", error);
+        res.status(500).json({ message: 'Gagal melakukan pencarian menu', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
+    }
+};
+
 // Update a menu item
 export const updateMenu = async (req, res) => {
     const errors = validationResult(req);
@@ -81,6 +118,15 @@ export const updateMenu = async (req, res) => {
 
 
     try {
+        // Pastikan menu yang akan diupdate ada dan belum di-soft-delete
+        const existingMenu = await prisma.menu.findFirst({
+            where: { id: parseInt(id), deletedAt: null }
+        });
+
+        if (!existingMenu) {
+            return res.status(404).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Menu item tidak ditemukan atau sudah dihapus.' }] });
+        }
+        
         const updatedMenu = await prisma.menu.update({
             where: { id: parseInt(id) },
             data: {
@@ -93,7 +139,9 @@ export const updateMenu = async (req, res) => {
         });
         res.json(updatedMenu);
     } catch (error) {
-        if (error.code === 'P2025') {
+        // P2025 adalah kode error Prisma jika record yang akan diupdate tidak ditemukan
+        // Seharusnya sudah ditangani oleh pengecekan `existingMenu` di atas.
+        if (error.code === 'P2025') { 
             return res.status(404).json({ message: 'Gagal memperbarui menu', errors: [{ msg: 'Menu item tidak ditemukan untuk diperbarui.' }] });
         }
         if (error.code === 'P2002' && error.meta?.target?.includes('name')) {
@@ -108,6 +156,15 @@ export const updateMenu = async (req, res) => {
 export const deleteMenu = async (req, res) => {
     const { id } = req.params;
     try {
+        // Pastikan menu yang akan dihapus ada dan belum di-soft-delete
+        const existingMenu = await prisma.menu.findFirst({
+            where: { id: parseInt(id), deletedAt: null }
+        });
+
+        if (!existingMenu) {
+            return res.status(404).json({ message: 'Gagal menghapus menu', errors: [{ msg: 'Menu item tidak ditemukan atau sudah dihapus.' }] });
+        }
+
         await prisma.menu.update({
             where: { id: parseInt(id) },
             data: {
@@ -116,7 +173,9 @@ export const deleteMenu = async (req, res) => {
         });
         res.status(204).send(); // No content
     } catch (error) {
-        if (error.code === 'P2025') {
+        // P2025 adalah kode error Prisma jika record yang akan didelete tidak ditemukan
+        // Seharusnya sudah ditangani oleh pengecekan `existingMenu` di atas.
+        if (error.code === 'P2025') { 
             return res.status(404).json({ message: 'Gagal menghapus menu', errors: [{ msg: 'Menu item tidak ditemukan untuk dihapus.' }] });
         }
         console.error("Delete menu error:", error);

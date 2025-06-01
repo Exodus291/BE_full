@@ -67,7 +67,7 @@ async function main() {
       role: 'STAFF',
       storeId: store1.id, // Staff bergabung dengan toko Owner
       referredByCode: ownerReferralCode,
-      referralCode: 'STAFFREF456' // Staff bisa punya referral code sendiri jika diinginkan
+      // referralCode: 'STAFFREF456' // Staff tidak lagi memiliki referral code
     },
   });
   console.log(`Staff seeded: ${staff1User.name} (ID: ${staff1User.id}), Store ID: ${staff1User.storeId}`);

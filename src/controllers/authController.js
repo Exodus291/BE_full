@@ -183,7 +183,7 @@ export const registerStaffWithReferral = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const staffReferralCode = generateReferralCode(); // Hasilkan kode referral untuk staff
+        // const staffReferralCode = generateReferralCode(); // Staff tidak lagi memiliki kode referral sendiri
 
         const newStaff = await prisma.user.create({
             data: { 
@@ -192,21 +192,52 @@ export const registerStaffWithReferral = async (req, res) => {
                 name, 
                 role: ROLES.STAFF, 
                 referredByCode: ownerReferralCode, 
-                referralCode: staffReferralCode,
+                // referralCode: staffReferralCode, // Hapus field ini untuk staff
                 storeId: referringOwner.storeId, // Assign staff to the referring owner's store
             },
             select: userProfileSelect // Use the common select for response consistency
         });
+
+        // Setelah staff berhasil dibuat, update kode referral owner
+        let ownerReferralCodeUpdated = false;
+        let attempts = 0;
+        const maxAttempts = 5; // Batas percobaan untuk menghasilkan kode unik
+
+        while (!ownerReferralCodeUpdated && attempts < maxAttempts) {
+            const newOwnerReferralCode = generateReferralCode();
+            try {
+                await prisma.user.update({
+                    where: { id: referringOwner.id },
+                    data: { referralCode: newOwnerReferralCode },
+                });
+                ownerReferralCodeUpdated = true;
+                console.log(`Referral code for owner ${referringOwner.id} updated to ${newOwnerReferralCode} after staff registration.`);
+            } catch (updateError) {
+                if (updateError.code === 'P2002' && updateError.meta?.target?.includes('referralCode')) {
+                    // Pelanggaran batasan unik untuk referralCode, coba lagi dengan kode baru
+                    console.warn(`Generated new referral code ${newOwnerReferralCode} for owner ${referringOwner.id} already exists. Retrying...`);
+                    attempts++;
+                } else {
+                    // Error lain saat update, log dan hentikan percobaan update kode referral owner
+                    console.error(`Error updating referral code for owner ${referringOwner.id}:`, updateError);
+                    break; // Keluar dari loop jika error bukan karena duplikasi kode
+                }
+            }
+        }
+
+        if (!ownerReferralCodeUpdated && attempts >= maxAttempts) {
+            console.error(`Failed to update owner ${referringOwner.id} with a new unique referral code after ${maxAttempts} attempts. Staff registration was still successful.`);
+        }
+
         res.status(201).json({ message: 'Registrasi Staff berhasil', user: newStaff });
     } catch (error) {
         console.error("Register Staff error:", error);
         if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
             // Seharusnya sudah ditangani oleh pengecekan existingUser, tapi sebagai fallback
             return res.status(409).json({ message: 'Registrasi gagal', errors: [{ msg: 'Email sudah terdaftar.' }] });
-        }
-        if (error.code === 'P2002' && error.meta?.target?.includes('referralCode')) {
-            // Menangani jika kode referral staff yang dihasilkan duplikat
-            return res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Gagal membuat kode referral unik untuk staff, silakan coba lagi.' }] });
+        // } // Komentari atau hapus blok ini karena staff tidak lagi memiliki referralCode yang unik
+        // if (error.code === 'P2002' && error.meta?.target?.includes('referralCode')) {
+            // return res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Gagal membuat kode referral unik untuk staff, silakan coba lagi.' }] });
         }
         res.status(500).json({ message: 'Registrasi gagal', errors: [{ msg: 'Terjadi kesalahan pada server.' }] });
     }

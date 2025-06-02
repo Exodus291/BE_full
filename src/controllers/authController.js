@@ -39,9 +39,6 @@ export const loginUser = async (req, res) => {
 
     const { email, password } = req.body;
 
-    // Pemeriksaan manual sudah tidak diperlukan karena ditangani express-validator
-    // if (!email || !password) { ... }
-
     try {
         const user = await prisma.user.findUnique({
             where: { email },
@@ -69,19 +66,18 @@ export const loginUser = async (req, res) => {
             referredByCode: user.referredByCode, // Tambahkan jika ingin ada di token
         };
 
-        const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '12h' });
 
         // Mengatur token sebagai HTTP-only cookie
         res.cookie('token', token, {
             httpOnly: true, // Cookie tidak dapat diakses oleh JavaScript sisi klien
             secure: process.env.NODE_ENV === 'production', // Kirim hanya melalui HTTPS di produksi
             sameSite: 'strict', // Mencegah serangan CSRF
-            maxAge: 24 * 60 * 60 * 1000 // 1 hari, sama dengan expiresIn token
+            maxAge: 12 * 60 * 60 * 1000 // 1 hari, sama dengan expiresIn token
         });
 
         res.json({
             message: 'Login berhasil',
-            // Token tidak lagi dikirim di body jika menggunakan httpOnly cookie
             user: tokenPayload,
         });
     } catch (error) {

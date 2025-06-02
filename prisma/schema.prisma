@@ -82,22 +82,27 @@ model Menu {
 }
 
 model Transaction {
-  id                Int      @id @default(autoincrement())
+  id                String   @id @default(uuid()) // Menggunakan UUID sebagai ID
   totalAmount       Decimal  // Menggunakan Decimal untuk total
   transactionDate   DateTime @default(now())
   userId            Int // Staff who processed
   user              User     @relation(fields: [userId], references: [id])
+  status            TransactionStatus @default(PENDING) // Menggunakan enum dan menambahkan default
   paymentMethod     String?  // e.g., "cash", "card"
   transactionItems  TransactionItem[]
   shiftId           Int?
   shift             Shift?   @relation(fields: [shiftId], references: [id])
   storeId           Int
   store             Store    @relation(fields: [storeId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model TransactionItem {
-  id                  Int      @id @default(autoincrement())
-  transactionId       Int
+  id                  String   @id @default(uuid()) // Menggunakan UUID sebagai ID untuk konsistensi, atau tetap Int jika preferensi
+  transactionId       String   // Harus cocok dengan tipe ID di Transaction
+  customerName        String
+  customerNote        String?
   transaction         Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   menuId              Int
   menu                Menu     @relation(fields: [menuId], references: [id])
@@ -125,4 +130,10 @@ model Shift {
 enum ShiftStatus {
   OPEN
   CLOSED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
 }
